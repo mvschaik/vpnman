@@ -1,15 +1,11 @@
 package nl.smeh.vpnman
 
-import org.springframework.stereotype.Controller
-import org.springframework.ui.Model
-import org.springframework.ui.set
-import org.springframework.web.bind.annotation.GetMapping
-import org.springframework.web.servlet.function.ServerRequest
-import org.springframework.web.servlet.function.ServerResponse
-import org.springframework.web.servlet.function.ServerResponse.ok
+import org.springframework.web.reactive.function.server.ServerRequest
+import org.springframework.web.reactive.function.server.ServerResponse
+import org.springframework.web.reactive.function.server.renderAndAwait
 
 class HtmlController(private val vpnServers: NordVpnServers, private val routerOsClient: RouterOsClient) {
-    fun blog(req: ServerRequest): ServerResponse {
+    suspend fun blog(req: ServerRequest): ServerResponse {
 //        val countryId = vpnServers.countriesByCode["NL"]?.id ?: throw java.lang.RuntimeException("Country not found")
 //        val wireguardId = vpnServers.technologiesByName["Wireguard"]?.id ?: throw java.lang.RuntimeException("Wireguard technology not found")
 //        val bestServer =
@@ -30,6 +26,6 @@ class HtmlController(private val vpnServers: NordVpnServers, private val routerO
                     "checked" to (clientAddr == it.activeAddress)
                 )
             }
-        return ok().render("main", mapOf("hosts" to leases))
+        return ServerResponse.ok().renderAndAwait("main", mapOf("hosts" to leases))
     }
 }

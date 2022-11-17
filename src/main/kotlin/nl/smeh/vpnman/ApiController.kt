@@ -1,15 +1,10 @@
 package nl.smeh.vpnman
 
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.module.kotlin.registerKotlinModule
+import kotlinx.coroutines.flow.flow
 import org.springframework.http.MediaType
-import org.springframework.http.ResponseEntity
-import org.springframework.web.bind.annotation.GetMapping
-import org.springframework.web.bind.annotation.PostMapping
-import org.springframework.web.bind.annotation.RequestMapping
-import org.springframework.web.bind.annotation.RestController
-import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody
-import java.io.OutputStream
+import org.springframework.web.reactive.function.server.ServerRequest
+import org.springframework.web.reactive.function.server.ServerResponse
+import org.springframework.web.reactive.function.server.bodyAndAwait
 
 private const val routingTableName = "to-vpn"
 private const val addressListName = "vpn-users"
@@ -33,57 +28,16 @@ enum class Status(val value: String) {
 
 data class ResponseMessage(val status: Status, val message: String)
 
-@RestController
-@RequestMapping("/api")
 class ApiController(private val nordVpnServers: NordVpnServers, private val routerOsClient: RouterOsClient) {
 
     private var status = Status.UNKNOWN
-    private val objectMapper = ObjectMapper().registerKotlinModule()
 
-    @GetMapping("/devices")
-    fun getDevices(): Collection<IpDhcpServerLease> = routerOsClient.list()
+    private fun message(message: String) = ResponseMessage(status, message)
 
-    @GetMapping("/country")
-    fun getCountries(): Collection<Country> = nordVpnServers.countries
-
-    fun checkWireguardConfig() {
-
-    }
-
-    fun cleanup(): Unit {
-//        val existingTable = routerOsClient.Routing().Table().retrieve(routingTableName)
-//        if (existingTable != null) {
-//            if (existingTable.comment?.contains(commentMarker) != true) {
-//                TODO("Oops, table with name exists")
-//            }
-//            routerOsClient.Routing().Table().delete(existingTable.id!!)
-//        }
-//
-//        routerOsClient.Ip().Firewall().AddressList().retrieve().filter { it.list == "vpn-users" }.forEach {
-//            if (it.comment?.contains(commentMarker) != true) {
-//                TODO("Oops. list with name exists")
-//            }
-//            routerOsClient.Ip().Firewall().AddressList().delete(it.id!!)
-//        }
-//
-//
-    }
-
-    private fun message(response: OutputStream, message: String) {
-        response.write(objectMapper.writeValueAsBytes(ResponseMessage(status, message)))
-        response.write('\n'.code)
-        response.flush()
-    }
-
-    @PostMapping("/connect")
-    fun connect(): ResponseEntity<StreamingResponseBody> {
-        // Find best service
-        val body = StreamingResponseBody { response ->
-
-            // TODO: check status
+    suspend fun connect(req: ServerRequest) =
+        ServerResponse.ok().contentType(MediaType.APPLICATION_NDJSON).bodyAndAwait(flow {
             status = Status.CONNECTING
-
-            message(response, "Checking optimal server for country $country")
+            emit(message("Checking optimal server for country $country"))
 
             val servers = nordVpnServers.getServers(
                 Filter(
@@ -94,81 +48,36 @@ class ApiController(private val nordVpnServers: NordVpnServers, private val rout
 
             if (servers.isEmpty()) {
                 status = Status.DISCONNECTED
-                message(response, "No VPN servers found")
-                return@StreamingResponseBody
+                emit(message("No VPN servers found"))
+                return@flow
             }
-            val server = servers.first()
-            message(response, "Connecting to server ${server.hostname}")
 
-            message(response, "Setting up routing table for VPN")
+            val server = servers.first()
+            emit(message("Connecting to server ${server.hostname}"))
+
+            emit(message("Setting up routing table for VPN"))
             ensureRoutingTable()
 
-            message(response, "Setting up route to VPN")
+            emit(message("Setting up route to VPN"))
             ensureRouteToVpn()
 
-            message(response, "Setting up VPN client interface")
+            emit(message("Setting up VPN client interface"))
             ensureWireguardInterface()
 
-            message(response, "Setting up VPN connection")
+            emit(message("Setting up VPN connection"))
             ensureWireguardPeer(server)
 
-            message(response, "Setting up routing rule")
+            emit(message("Setting up routing rule"))
             ensureRoutingRule()
 
-            message(response, "Setting up firewall rules")
+            emit(message("Setting up firewall rules"))
             ensureFirewallRule()
 
             // TODO: NAT
 
             status = Status.CONNECTED
-            message(response, "Connected!")
-        }
-
-        return ResponseEntity.ok().contentType(MediaType.APPLICATION_NDJSON).body(body)
-
-        // Cleanup existing configuration
-//        for (addressList in routerOsClient.Ip().Firewall().AddressList().retrieve()) {
-//            if (addressList.list == "vpn-users" && addressList.comment?.contains(commentMarker) != true) {
-//                TODO("Oops, list with name exists")
-//            }
-//        }
-
-
-        //* /ip/firewall/address-list/add address=xxxx list=vpn-users
-        // TODO("Set up VPN")
-
-        // Route VPN users through VPN
-//        routerOsClient.Ip().Firewall().AddressList()
-//            .create(IpFirewallAddressList(list = addressListName, comment = commentMarker))
-//        routerOsClient.Routing().Table()
-//            .create(RoutingTable(fib = true, name = routingTableName, comment = commentMarker))
-//        routerOsClient.Routing().Rule().create(
-//            RoutingRule(
-//                action = "lookup",
-//                routingMark = routingMarker,
-//                table = routingTableName,
-//                comment = commentMarker
-//            )
-//        )
-//        routerOsClient.Ip().Firewall().Mangle().create(
-//            IpFirewallMangle(
-//                action = IpFirewallMangle.Action.MARK_ROUTING,
-//                chain = "prerouting",
-//                dstAddressList = "!lan-addr",
-//                newRoutingMark = routingMarker,
-//                passthrough = false,
-//                srcAddressList = addressListName,
-//                comment = commentMarker
-//            )
-//        )
-//        routerOsClient.Ip().Route().create(
-//            IpRoute(
-//                dstAddress = "0.0.0.0/0",
-//                gateway = vpnGatewayAddress,
-//                routingTable = routingTableName,
-//                comment = commentMarker
-//            )
-//        )
+            emit(message("Connected!"))
+        })
 
 
         //* /routing/table/add fib name=to-vpn
@@ -177,31 +86,24 @@ class ApiController(private val nordVpnServers: NordVpnServers, private val rout
         ///interface/wireguard/peers/add allowed-address=0.0.0.0/0 endpoint-address=XXX endpoint-port=51820 interface=nordlynx public-key=xxx
         ///routing/rule/add action=lookup routing-mark=to-vpn table=to-vpn
         ///ip/firewall/mangle/add action=mark-routing chain=prerouting dst-address-list=!lan-addr new-routing-mark=to-vpn passthrough=no src-address-list=vpn-users
-    }
 
-    @PostMapping("/disconnect")
-    fun disconnect(): ResponseEntity<StreamingResponseBody> {
-        // Find best service
-        val body = StreamingResponseBody { response ->
-
-            // TODO: check status
+    suspend fun disconnect(req: ServerRequest) =
+        ServerResponse.ok().contentType(MediaType.APPLICATION_NDJSON).bodyAndAwait(flow {
             status = Status.DISCONNECTING
 
-            message(response, "Closing VPN connection")
+            emit(message("Closing VPN connection"))
             clearWireguardPeer()
 
-            message(response, "Clearing routing rule")
+            emit(message("Clearing routing rule"))
             clearRoutingRule()
 
-            message(response, "Clearing firewall rules")
+            emit(message("Clearing firewall rules"))
             clearFirewallRule()
 
             status = Status.DISCONNECTED
-            message(response, "Disconnected!")
-        }
+            emit(message("Disconnected!"))
+        })
 
-        return ResponseEntity.ok().contentType(MediaType.APPLICATION_NDJSON).body(body)
-    }
 
 
     // /routing/table/add fib name=to-vpn
@@ -302,22 +204,25 @@ class ApiController(private val nordVpnServers: NordVpnServers, private val rout
             )
         )
         if (rules.isEmpty()) {
-            routerOsClient.add(IpFirewallMangle(
-                action = IpFirewallMangle.Action.MARK_ROUTING,
-                chain = "prerouting",
-                dstAddress = "!192.168.42.0/24",
-                newRoutingMark = routingMarker,
-                passthrough = false,
-                srcAddressList = addressListName,
-                comment = vpnManComment
-            ))
+            routerOsClient.add(
+                IpFirewallMangle(
+                    action = IpFirewallMangle.Action.MARK_ROUTING,
+                    chain = "prerouting",
+                    dstAddress = "!192.168.42.0/24",
+                    newRoutingMark = routingMarker,
+                    passthrough = false,
+                    srcAddressList = addressListName,
+                    comment = vpnManComment
+                )
+            )
         }
     }
 
     private fun clearFirewallRule() {
         val rules = routerOsClient.list(
             IpFirewallMangle(
-                action = IpFirewallMangle.Action.MARK_ROUTING)
+                action = IpFirewallMangle.Action.MARK_ROUTING
+            )
         )
         rules.filter { it.comment == vpnManComment }.forEach { routerOsClient.remove<IpFirewallMangle>(it.id!!) }
     }

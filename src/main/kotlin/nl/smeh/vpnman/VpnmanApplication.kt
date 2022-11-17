@@ -1,14 +1,13 @@
 package nl.smeh.vpnman
 
 import org.springframework.boot.autoconfigure.SpringBootApplication
-import org.springframework.boot.builder.SpringApplicationBuilder
 import org.springframework.boot.runApplication
 import org.springframework.boot.web.client.RestTemplateBuilder
 import org.springframework.context.support.beans
 import org.springframework.core.env.Environment
-import org.springframework.http.client.HttpComponentsClientHttpRequestFactory
+import org.springframework.http.MediaType
 import org.springframework.http.client.OkHttp3ClientHttpRequestFactory
-import org.springframework.web.servlet.function.router
+import org.springframework.web.reactive.function.server.coRouter
 
 @SpringBootApplication
 class VpnmanApplication
@@ -31,10 +30,16 @@ fun main(args: Array<String>) {
             bean {
                 val htmlController = HtmlController(ref(), ref())
                 val apiController = ApiController(ref(), ref())
-                router {
-
-                    GET("", htmlController::blog)
-
+                coRouter {
+                    accept(MediaType.TEXT_HTML).nest {
+                        GET("/", htmlController::blog)
+                    }
+                    accept(MediaType.APPLICATION_JSON).nest {
+                        "/api".nest {
+                            POST("/connect", apiController::connect)
+                            POST("/disconnect", apiController::disconnect)
+                        }
+                    }
                 }
             }
         })
