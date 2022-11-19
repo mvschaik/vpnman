@@ -53,7 +53,14 @@
         const status = document.getElementById("status");
         const advancedBtn = document.getElementById("advanced-toggle");
         const advancedPanel = document.getElementById("advanced");
+        const advancedForm = document.getElementById("advanced-form");
 
+        if (localStorage.getItem("hosts")) {
+            const selected = new Set(localStorage.getItem("hosts").split(","));
+            for (const el of advancedForm.elements['host']) {
+                el.checked = selected.has(el.value);
+            }
+        }
 
         function parseNDJson() {
             let ndjsonBuffer = '';
@@ -110,7 +117,8 @@
         }
 
         connectBtn.addEventListener("click", () => {
-            const data = new FormData(document.getElementById("advanced-form"));
+            const data = new FormData(advancedForm);
+            localStorage.setItem("hosts", data.getAll("host").join(","));
             fetch("/api/connect", {method: 'POST', body: data}).then(response => {
                 const statusUpdates = response.body.pipeThrough(new TextDecoderStream()).pipeThrough(parseNDJson());
                 processStatusUpdateStream(statusUpdates.getReader());

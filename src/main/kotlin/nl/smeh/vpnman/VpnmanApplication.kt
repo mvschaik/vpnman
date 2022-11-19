@@ -8,6 +8,7 @@ import org.springframework.core.env.Environment
 import org.springframework.http.MediaType
 import org.springframework.http.client.OkHttp3ClientHttpRequestFactory
 import org.springframework.web.reactive.function.server.coRouter
+import org.springframework.web.server.adapter.ForwardedHeaderTransformer
 
 @SpringBootApplication
 class VpnmanApplication
@@ -27,6 +28,7 @@ fun main(args: Array<String>) {
             bean {
                 NordVpnServers(RestTemplateBuilder().build())
             }
+            bean<ForwardedHeaderTransformer>()
             bean {
                 val htmlController = HtmlController(ref(), ref())
                 val apiController = ApiController(ref(), ref())
