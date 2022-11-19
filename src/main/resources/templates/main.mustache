@@ -3,7 +3,8 @@
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>VPNMan</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-Zenh87qX5JnK2Jl0vWa8Ck2rdkQ2Bzep5IDxbcnCeuOxjzrPF/et3URy9Bv1WTRi" crossorigin="anonymous">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-Zenh87qX5JnK2Jl0vWa8Ck2rdkQ2Bzep5IDxbcnCeuOxjzrPF/et3URy9Bv1WTRi" crossorigin="anonymous">
 </head>
 <body>
 
@@ -23,136 +24,137 @@
         <a id="advanced-toggle" href="#advanced">Advanced settings</a>
         <div class="collapse" id="advanced">
             <form id="advanced-form">
-            <div class="card card-body">
-                <h1>Select VPN users</h1>
-                <table>
-                    <thead>
-                    <tr>
-                        <th>VPN</th>
-                        <th>Name</th>
-                        <th>Address</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    {{#hosts}}
-                    <tr>
-                        <td><input name="host" value="{{ address }}" type="checkbox" {{#checked}}checked{{/checked}} disabled></td>
-                        <td>{{#name}}{{ name }}{{/name}}</td>
-                        <td>{{ address }}</td>
-                    </tr>
-                    {{/hosts}}
-                    </tbody>
-                </table>
-            </div>
+                <div class="card card-body">
+                    <h1>Select VPN users</h1>
+                    <table>
+                        <thead>
+                        <tr>
+                            <th>VPN</th>
+                            <th>Name</th>
+                            <th>Address</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {{#hosts}}
+                        <tr>
+                            <td><input name="host" value="{{ address }}" type="checkbox" {{#checked}}checked{{/checked}}
+                                       disabled></td>
+                            <td>{{#name}}{{ name }}{{/name}}</td>
+                            <td>{{ address }}</td>
+                        </tr>
+                        {{/hosts}}
+                        </tbody>
+                    </table>
+                </div>
             </form>
         </div>
     </div>
 </div>
 <script>
-        const connectBtn = document.getElementById("connect");
-        const disconnectBtn = document.getElementById("disconnect");
-        const statusField = document.getElementById("status");
-        const hostField = document.getElementById("host");
-        const advancedBtn = document.getElementById("advanced-toggle");
-        const advancedPanel = document.getElementById("advanced");
-        const advancedForm = document.getElementById("advanced-form");
+    const connectBtn = document.getElementById("connect");
+    const disconnectBtn = document.getElementById("disconnect");
+    const statusField = document.getElementById("status");
+    const hostField = document.getElementById("host");
+    const advancedBtn = document.getElementById("advanced-toggle");
+    const advancedPanel = document.getElementById("advanced");
+    const advancedForm = document.getElementById("advanced-form");
 
-        function setSelectedHosts(hosts) {
-            const selected = new Set(hosts);
-            for (const el of advancedForm.elements['host']) {
-                el.checked = selected.has(el.value);
-            }
+    function setSelectedHosts(hosts) {
+        const selected = new Set(hosts);
+        for (const el of advancedForm.elements['host']) {
+            el.checked = selected.has(el.value);
         }
+    }
 
-        function parseNDJson() {
-            let ndjsonBuffer = '';
-            return new TransformStream({
-                transform: (chunk, controller) => {
-                    ndjsonBuffer += chunk;
+    function parseNDJson() {
+        let ndjsonBuffer = '';
+        return new TransformStream({
+            transform: (chunk, controller) => {
+                ndjsonBuffer += chunk;
 
-                    const jsonValues = ndjsonBuffer.split("\n");
-                    jsonValues.slice(0, -1).forEach(value => controller.enqueue(JSON.parse(value)));
+                const jsonValues = ndjsonBuffer.split("\n");
+                jsonValues.slice(0, -1).forEach(value => controller.enqueue(JSON.parse(value)));
 
-                    ndjsonBuffer = jsonValues[jsonValues.length - 1];
-                },
-                flush: (controller) => {
-                    if (ndjsonBuffer) {
-                        controller.enqueue(JSON.parse(ndjsonBuffer));
-                    }
+                ndjsonBuffer = jsonValues[jsonValues.length - 1];
+            },
+            flush: (controller) => {
+                if (ndjsonBuffer) {
+                    controller.enqueue(JSON.parse(ndjsonBuffer));
                 }
-            });
+            }
+        });
+    }
+
+    function processStatus(status) {
+        if (status.status === 500) {
+            status.innerHTML = `<pre>${status.trace}</pre>`;
         }
-
-        function processStatus(status) {
-            if (status.status === 500) {
-                status.innerHTML = `<pre>${status.trace}</pre>`;
-            }
-            switch (status.status.connection) {
-                case 'CONNECTED':
-                    connectBtn.disabled = true;
-                    disconnectBtn.disabled = false;
-                    setFormEnabled(false);
-                    if (status.status.hosts) {
-                        setSelectedHosts(status.status.hosts);
-                    }
-                    break;
-                case 'DISCONNECTED':
-                    connectBtn.disabled = false;
-                    disconnectBtn.disabled = true;
-                    setFormEnabled(true);
-                    break;
-                case 'CONNECTING':
-                    connectBtn.disabled = true;
-                    disconnectBtn.disabled = true;
-                    setFormEnabled(false);
-                    break;
-                case 'DISCONNECTING':
-                    connectBtn.disabled = true;
-                    disconnectBtn.disabled = true;
-                    setFormEnabled(false);
-                    break;
-            }
-            hostField.textContent = status.status.server ? `Server: ${status.status.server}` : "";
-            if (status.message) {
-                statusField.textContent = status.message;
-            }
-            console.log(status);
-        }
-
-        function setFormEnabled(enabled) {
-            for (const el of advancedForm.elements) {
-                el.disabled = !enabled;
-            }
-        }
-
-        function processStatusUpdateStream(statusUpdateReader) {
-            statusUpdateReader.read().then(result => {
-                if (!result.done) {
-                    processStatus(result.value);
-
-                    // recurse
-                    processStatusUpdateStream(statusUpdateReader);
+        switch (status.status.connection) {
+            case 'CONNECTED':
+                connectBtn.disabled = true;
+                disconnectBtn.disabled = false;
+                setFormEnabled(false);
+                if (status.status.hosts) {
+                    setSelectedHosts(status.status.hosts);
                 }
-            });
+                break;
+            case 'DISCONNECTED':
+                connectBtn.disabled = false;
+                disconnectBtn.disabled = true;
+                setFormEnabled(true);
+                break;
+            case 'CONNECTING':
+                connectBtn.disabled = true;
+                disconnectBtn.disabled = true;
+                setFormEnabled(false);
+                break;
+            case 'DISCONNECTING':
+                connectBtn.disabled = true;
+                disconnectBtn.disabled = true;
+                setFormEnabled(false);
+                break;
         }
+        hostField.textContent = status.status.server ? `Server: ${status.status.server}` : "";
+        if (status.message) {
+            statusField.textContent = status.message;
+        }
+        console.log(status);
+    }
 
-        connectBtn.addEventListener("click", () => {
-            const data = new FormData(advancedForm);
-            localStorage.setItem("hosts", data.getAll("host").join(","));
-            fetch("/api/connect", {method: 'POST', body: data}).then(response => {
-                const statusUpdates = response.body.pipeThrough(new TextDecoderStream()).pipeThrough(parseNDJson());
-                processStatusUpdateStream(statusUpdates.getReader());
-            });
+    function setFormEnabled(enabled) {
+        for (const el of advancedForm.elements) {
+            el.disabled = !enabled;
+        }
+    }
+
+    function processStatusUpdateStream(statusUpdateReader) {
+        statusUpdateReader.read().then(result => {
+            if (!result.done) {
+                processStatus(result.value);
+
+                // recurse
+                processStatusUpdateStream(statusUpdateReader);
+            }
         });
+    }
 
-        disconnectBtn.addEventListener("click", () => {
-            fetch("/api/disconnect", {method: 'POST'}).then(response => {
-                const statusUpdates = response.body.pipeThrough(new TextDecoderStream()).pipeThrough(parseNDJson());
-                processStatusUpdateStream(statusUpdates.getReader());
-            });
+    connectBtn.addEventListener("click", () => {
+        const data = new FormData(advancedForm);
+        localStorage.setItem("hosts", data.getAll("host").join(","));
+        fetch("/api/connect", {method: 'POST', body: data}).then(response => {
+            const statusUpdates = response.body.pipeThrough(new TextDecoderStream()).pipeThrough(parseNDJson());
+            processStatusUpdateStream(statusUpdates.getReader());
         });
+    });
 
-        advancedBtn.addEventListener("click", () => {
+    disconnectBtn.addEventListener("click", () => {
+        fetch("/api/disconnect", {method: 'POST'}).then(response => {
+            const statusUpdates = response.body.pipeThrough(new TextDecoderStream()).pipeThrough(parseNDJson());
+            processStatusUpdateStream(statusUpdates.getReader());
+        });
+    });
+
+    advancedBtn.addEventListener("click", () => {
         if (advancedPanel.classList.contains("show")) {
             advancedPanel.classList.remove("show");
         } else {
@@ -160,11 +162,11 @@
         }
     });
 
-        if (localStorage.getItem("hosts")) {
-            setSelectedHosts(localStorage.getItem("hosts").split(","));
-        }
+    if (localStorage.getItem("hosts")) {
+        setSelectedHosts(localStorage.getItem("hosts").split(","));
+    }
 
-        fetch("/api/status").then(response => response.json().then(processStatus));
+    fetch("/api/status").then(response => response.json().then(processStatus));
 </script>
 </body>
 </html>
