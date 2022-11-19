@@ -21,6 +21,7 @@
     <div class="my-3">
         <a id="advanced-toggle" href="#advanced">Advanced settings</a>
         <div class="collapse" id="advanced">
+            <form id="advanced-form">
             <div class="card card-body">
                 <h1>Select VPN users</h1>
                 <table>
@@ -42,6 +43,7 @@
                     </tbody>
                 </table>
             </div>
+            </form>
         </div>
     </div>
 </div>
@@ -108,7 +110,8 @@
         }
 
         connectBtn.addEventListener("click", () => {
-            fetch("/api/connect", {method: 'POST'}).then(response => {
+            const data = new FormData(document.getElementById("advanced-form"));
+            fetch("/api/connect", {method: 'POST', body: data}).then(response => {
                 const statusUpdates = response.body.pipeThrough(new TextDecoderStream()).pipeThrough(parseNDJson());
                 processStatusUpdateStream(statusUpdates.getReader());
             });

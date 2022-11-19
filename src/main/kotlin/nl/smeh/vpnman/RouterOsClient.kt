@@ -5,7 +5,6 @@ import com.fasterxml.jackson.annotation.JsonProperty
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.node.ObjectNode
 import com.fasterxml.jackson.module.kotlin.registerKotlinModule
-import okio.Utf8
 import org.springframework.core.ParameterizedTypeReference
 import org.springframework.http.HttpEntity
 import org.springframework.http.HttpMethod
@@ -88,6 +87,91 @@ data class RoutingRule(
     // Read-only
     @JsonProperty("inactive") val inactive: Boolean? = null,
 )
+
+@ResourcePath("/ip/firewall/nat")
+@JsonInclude(JsonInclude.Include.NON_NULL)
+data class IpFirewallNat(
+    @JsonProperty(".id") val id: String? = null,
+
+    @JsonProperty("comment") val comment: String? = null,
+    @JsonProperty("disabled") val disabled: Boolean? = null,
+
+    @JsonProperty("action") val action: Action?,
+    @JsonProperty("address-list") val addressList: String? = null,
+    @JsonProperty("address-list-timeout") val addressListTimeout: String? = null,
+    @JsonProperty("chain") val chain: String? = null,
+    @JsonProperty("connection-bytes") val connectionBytes: Int? = null,
+    @JsonProperty("connection-limit") val connectionLimit: String? = null,
+    @JsonProperty("connection-mark") val connectionMark: String? = null,
+    @JsonProperty("connection-rate") val connectionRate: Int? = null,
+    @JsonProperty("connection-type") val connectionType: String? = null,
+    @JsonProperty("content") val content: String? = null,
+    @JsonProperty("dscp") val dscp: Int? = null,
+    @JsonProperty("dst-address") val dstAddress: String? = null,
+    @JsonProperty("dst-address-list") val dstAddressList: String? = null,
+    @JsonProperty("dst-address-type") val dstAddressType: String? = null,
+    @JsonProperty("dst-limit") val dstLimit: String? = null,
+    @JsonProperty("dst-port") val dstPort: Int? = null,
+    @JsonProperty("fragment") val fragment: Boolean? = null,
+    @JsonProperty("hotspot") val hotspot: String? = null,
+    @JsonProperty("icmp-options") val icmpOptions: Int? = null,
+    @JsonProperty("in-bridge-port") val inBridgePort: String? = null,
+    @JsonProperty("in-interface") val inInterface: String? = null,
+    @JsonProperty("ingress-priority") val ingressPriority: Int? = null,
+    @JsonProperty("ipsec-policy") val ipsecPolicy: String? = null,
+    @JsonProperty("ipv4-options") val ipv4Options: String? = null,
+    @JsonProperty("jump-target") val jumpTarget: String? = null,
+    @JsonProperty("layer7-protocol") val layer7Protocol: String? = null,
+    @JsonProperty("limit") val limit: String? = null,
+    @JsonProperty("log-prefix") val logPrefix: String? = null,
+    @JsonProperty("nth") val nth: Int? = null,
+    @JsonProperty("out-bridge-port") val outBridgePort: String? = null,
+    @JsonProperty("out-interface") val outInterface: String? = null,
+    @JsonProperty("packet-mark") val packetMark: String? = null,
+    @JsonProperty("packet-size") val packetSize: Int? = null,
+    @JsonProperty("per-connection-classifier") val perConnectionClassifier: String? = null,
+    @JsonProperty("port") val port: Int? = null,
+    @JsonProperty("protocol") val protocol: String? = null,
+    @JsonProperty("psd") val psd: String? = null,
+    @JsonProperty("random") val randon: Int? = null,
+    @JsonProperty("routing-mark") val routingMark: String? = null,
+    @JsonProperty("src-address") val srcAddress: String? = null,
+    @JsonProperty("src-address-list") val srcAddressList: String? = null,
+    @JsonProperty("src-address-type") val srcAddressType: String? = null,
+    @JsonProperty("src-port") val srcPort: Int? = null,
+    @JsonProperty("src-mac-address") val srcMacAddress: String? = null,
+    @JsonProperty("tcp-mss") val tcpMss: Int? = null,
+    @JsonProperty("time") val time: String? = null,
+    @JsonProperty("to-addresses") val toAddresses: String? = null,
+    @JsonProperty("to-port") val toPort: String? = null,
+    @JsonProperty("ttl") val ttl: String? = null,
+
+    // Read-only
+    @JsonProperty("bytes") val bytes: Int? = null,
+    @JsonProperty("dynamic") val dynamic: Boolean? = null,
+    @JsonProperty("invalid") val invalid: Boolean? = null,
+    @JsonProperty("packets") val packets: Int? = null,
+) {
+    enum class Action {
+        @JsonProperty("accept")
+        ACCEPT,
+
+        @JsonProperty("add-dst-to-address-list")
+        ADD_DST_TO_ADDRESS_LIST,
+
+        // ...
+        @JsonProperty("masquerade")
+        MASQUERADE,
+
+        @JsonProperty("src-nat")
+        SRC_NAT,
+
+        @JsonProperty("dst-nat")
+        DST_NAT,
+        // ...
+
+    }
+}
 
 @ResourcePath("/ip/firewall/mangle")
 @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -307,14 +391,14 @@ class RouterOsClient(
         return response.body ?: throw RuntimeException("Error with POST: $response")
     }
 
-    final inline fun <reified T : Any> get(id: String): T = get(id, getPath(T::class.java), T::class.java)
+    inline fun <reified T : Any> get(id: String): T = get(id, getPath(T::class.java), T::class.java)
 
     fun <T : Any> get(id: String, path: String, type: Class<T>): T {
         val response = restTemplate.getForEntity("$baseUrl/rest$path/$id}", type)
         return response.body ?: throw RuntimeException("Error with GET: $response")
     }
 
-    final inline fun <reified T : Any> list(filters: T? = null): Collection<T> =
+    inline fun <reified T : Any> list(filters: T? = null): Collection<T> =
         list(getPath(T::class.java), filters, object : ParameterizedTypeReference<Collection<T>>() {})
 
 
@@ -325,13 +409,13 @@ class RouterOsClient(
         return response.body ?: throw RuntimeException("Error fetching list at $path: $response")
     }
 
-    final inline fun <reified T : Any> set(id: String, newResource: T): T? =
+    inline fun <reified T : Any> set(id: String, newResource: T): T? =
         set(id, getPath(newResource::class.java), newResource, T::class.java)
 
     fun <T : Any> set(id: String, path: String, newResource: T, type: Class<T>): T? =
         restTemplate.patchForObject("$baseUrl/rest$path/$id", newResource, type)
 
-    final inline fun <reified T : Any> remove(id: String): Unit = remove(id, getPath(T::class.java))
+    inline fun <reified T : Any> remove(id: String): Unit = remove(id, getPath(T::class.java))
 
     fun remove(id: String, path: String): Unit = restTemplate.delete("$baseUrl/rest$path/$id")
 

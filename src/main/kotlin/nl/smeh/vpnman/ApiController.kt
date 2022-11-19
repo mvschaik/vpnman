@@ -2,16 +2,14 @@ package nl.smeh.vpnman
 
 import kotlinx.coroutines.flow.flow
 import org.springframework.http.MediaType
-import org.springframework.web.reactive.function.server.ServerRequest
-import org.springframework.web.reactive.function.server.ServerResponse
-import org.springframework.web.reactive.function.server.bodyAndAwait
+import org.springframework.http.codec.multipart.FormFieldPart
+import org.springframework.web.reactive.function.server.*
 
 private const val routingTableName = "to-vpn"
 private const val addressListName = "vpn-users"
 private const val commentMarker = "vpnman"
 private const val vpnGatewayAddress = "10.5.0.1"
 private const val vpnLocalAddress = "10.5.0.2/29"
-private const val routingMarker = "to-vpn"
 private const val country = "NL"
 private const val technologyName = "Wireguard"
 private const val vpnManComment = "Managed by VPNMAN"
@@ -37,8 +35,16 @@ class ApiController(private val nordVpnServers: NordVpnServers, private val rout
     suspend fun connect(req: ServerRequest) =
         ServerResponse.ok().contentType(MediaType.APPLICATION_NDJSON).bodyAndAwait(flow {
             status = Status.CONNECTING
-            emit(message("Checking optimal server for country $country"))
 
+            val data = req.awaitMultipartData()
+            val hosts = data.getOrDefault("host", listOf()).filterIsInstance<FormFieldPart>().map { it.value() }
+            if (hosts.isEmpty()) {
+                status = Status.DISCONNECTED
+                emit(message("Error! No hosts selected for VPN"))
+                return@flow
+            }
+
+            emit(message("Checking optimal server for country $country"))
             val servers = nordVpnServers.getServers(
                 Filter(
                     country_id = nordVpnServers.countriesByCode[country]?.id,
@@ -64,30 +70,23 @@ class ApiController(private val nordVpnServers: NordVpnServers, private val rout
             emit(message("Setting up VPN client interface"))
             ensureWireguardInterface()
 
+            // TODO IP Address
+
             emit(message("Setting up VPN connection"))
             ensureWireguardPeer(server)
 
-            emit(message("Setting up routing rule"))
-            ensureRoutingRule()
+            emit(message("Configuring NAT for VPN interface"))
+            ensureFirewallNat()
 
-            emit(message("Setting up firewall rules"))
-            ensureFirewallRule()
-
-            // TODO: NAT
+            emit(message("Setting up routing rules"))
+            clearRoutingRules()
+            hosts.forEach { ensureRoutingRule(it) }
 
             status = Status.CONNECTED
             emit(message("Connected!"))
         })
 
-
-        //* /routing/table/add fib name=to-vpn
-        // /ip/route/add dst-address=0.0.0.0/0 gateway=10.5.0.1 routing-table=to-vpn
-        ///interface/wireguard/add listen-port=51820 name=nordlynx
-        ///interface/wireguard/peers/add allowed-address=0.0.0.0/0 endpoint-address=XXX endpoint-port=51820 interface=nordlynx public-key=xxx
-        ///routing/rule/add action=lookup routing-mark=to-vpn table=to-vpn
-        ///ip/firewall/mangle/add action=mark-routing chain=prerouting dst-address-list=!lan-addr new-routing-mark=to-vpn passthrough=no src-address-list=vpn-users
-
-    suspend fun disconnect(req: ServerRequest) =
+    suspend fun disconnect(_req: ServerRequest) =
         ServerResponse.ok().contentType(MediaType.APPLICATION_NDJSON).bodyAndAwait(flow {
             status = Status.DISCONNECTING
 
@@ -95,15 +94,11 @@ class ApiController(private val nordVpnServers: NordVpnServers, private val rout
             clearWireguardPeer()
 
             emit(message("Clearing routing rule"))
-            clearRoutingRule()
-
-            emit(message("Clearing firewall rules"))
-            clearFirewallRule()
+            clearRoutingRules()
 
             status = Status.DISCONNECTED
             emit(message("Disconnected!"))
         })
-
 
 
     // /routing/table/add fib name=to-vpn
@@ -167,63 +162,45 @@ class ApiController(private val nordVpnServers: NordVpnServers, private val rout
         }
     }
 
+    private fun ensureFirewallNat() {
+        val rules = routerOsClient.list(
+            IpFirewallNat(
+                chain = "srcnat",
+                action = IpFirewallNat.Action.MASQUERADE,
+                outInterface = nordLynxInterface
+            )
+        )
+        if (rules.isEmpty()) {
+            routerOsClient.add(
+                IpFirewallNat(
+                    chain = "srcnat",
+                    action = IpFirewallNat.Action.MASQUERADE,
+                    outInterface = nordLynxInterface,
+                    comment = vpnManComment
+                )
+            )
+        }
+    }
+
     private fun clearWireguardPeer() {
         val peers = routerOsClient.list(InterfaceWireguardPeers(iface = nordLynxInterface))
         peers.filter { it.comment == vpnManComment }.forEach { routerOsClient.remove<InterfaceWireguardPeers>(it.id!!) }
     }
 
     // /routing/rule/add action=lookup routing-mark=to-vpn table=to-vpn
-    private fun ensureRoutingRule() {
-        val rules =
-            routerOsClient.list(RoutingRule(action = "lookup", routingMark = routingMarker, table = routingTableName))
-        if (rules.isEmpty()) {
-            routerOsClient.add(
-                RoutingRule(
-                    action = "lookup",
-                    routingMark = routingMarker,
-                    table = routingTableName,
-                    comment = vpnManComment
-                )
+    private fun ensureRoutingRule(host: String) {
+        routerOsClient.add(
+            RoutingRule(
+                srcAddress = host,
+                action = "lookup",
+                table = routingTableName,
+                comment = vpnManComment
             )
-        }
+        )
     }
 
-    private fun clearRoutingRule() {
+    private fun clearRoutingRules() {
         val rules = routerOsClient.list<RoutingRule>()
         rules.filter { it.comment == vpnManComment }.forEach { routerOsClient.remove<RoutingRule>(it.id!!) }
-    }
-
-    // /ip/firewall/mangle/add action=mark-routing chain=prerouting dst-address-list=!lan-addr new-routing-mark=to-vpn passthrough=no src-address-list=vpn-users
-    private fun ensureFirewallRule() {
-        val rules = routerOsClient.list(
-            IpFirewallMangle(
-                action = IpFirewallMangle.Action.MARK_ROUTING,
-                chain = "prerouting",
-                newRoutingMark = routingMarker,
-                srcAddressList = addressListName
-            )
-        )
-        if (rules.isEmpty()) {
-            routerOsClient.add(
-                IpFirewallMangle(
-                    action = IpFirewallMangle.Action.MARK_ROUTING,
-                    chain = "prerouting",
-                    dstAddress = "!192.168.42.0/24",
-                    newRoutingMark = routingMarker,
-                    passthrough = false,
-                    srcAddressList = addressListName,
-                    comment = vpnManComment
-                )
-            )
-        }
-    }
-
-    private fun clearFirewallRule() {
-        val rules = routerOsClient.list(
-            IpFirewallMangle(
-                action = IpFirewallMangle.Action.MARK_ROUTING
-            )
-        )
-        rules.filter { it.comment == vpnManComment }.forEach { routerOsClient.remove<IpFirewallMangle>(it.id!!) }
     }
 }
