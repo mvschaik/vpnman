@@ -38,6 +38,7 @@ fun main(args: Array<String>) {
                     }
                     accept(MediaType.APPLICATION_JSON).nest {
                         "/api".nest {
+                            GET("/status", apiController::getState)
                             POST("/connect", apiController::connect)
                             POST("/disconnect", apiController::disconnect)
                         }

@@ -63,7 +63,6 @@ docker run --rm --expose=8080 \
 * Add tests. :-)
 * Take private key from environment variable.
 * Make country configurable.
-* Read and display current VPN state.
 * Store country in browser state.
 * Preselect/mark obvious candidate devices, e.g. Chromecast, AppleTV, etc. based on MAC address.
 

@@ -14,7 +14,7 @@ private const val vpnManComment = "Managed by VPNMAN"
 private const val nordLynxInterface = "nordlynx1"
 private const val nordLynxPort = 51820
 
-enum class Status(val value: String) {
+enum class ConnectionStatus(val value: String) {
     UNKNOWN("unknown"),
     DISCONNECTED("disconnected"),
     CONNECTED("connected"),
@@ -24,20 +24,34 @@ enum class Status(val value: String) {
 
 data class ResponseMessage(val status: Status, val message: String)
 
+data class Status(val connection: ConnectionStatus, val server: String?, val hosts: List<String>)
+
 class ApiController(private val nordVpnServers: NordVpnServers, private val routerOsClient: RouterOsClient) {
 
-    private var status = Status.UNKNOWN
+    private var connectionStatus = ConnectionStatus.UNKNOWN
+    private var hosts = listOf<String>()
+    private var server: String? = null
 
-    private fun message(message: String) = ResponseMessage(status, message)
+    private fun message(message: String) = ResponseMessage(Status(connectionStatus, server, hosts), message)
+
+    suspend fun getState(req: ServerRequest): ServerResponse {
+        server = getWireguardPeerName()
+        hosts = getRoutedHosts()
+        connectionStatus =
+            if (server != null && !hosts.isEmpty()) ConnectionStatus.CONNECTED else ConnectionStatus.DISCONNECTED
+        return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).bodyValueAndAwait(
+            message(if (connectionStatus == ConnectionStatus.CONNECTED) "Connected to $server" else "Disconnected")
+        )
+    }
 
     suspend fun connect(req: ServerRequest) =
         ServerResponse.ok().contentType(MediaType.APPLICATION_NDJSON).bodyAndAwait(flow {
-            status = Status.CONNECTING
+            connectionStatus = ConnectionStatus.CONNECTING
 
             val data = req.awaitMultipartData()
-            val hosts = data.getOrDefault("host", listOf()).filterIsInstance<FormFieldPart>().map { it.value() }
+            hosts = data.getOrDefault("host", listOf()).filterIsInstance<FormFieldPart>().map { it.value() }
             if (hosts.isEmpty()) {
-                status = Status.DISCONNECTED
+                connectionStatus = ConnectionStatus.DISCONNECTED
                 emit(message("Error! No hosts selected for VPN"))
                 return@flow
             }
@@ -51,13 +65,13 @@ class ApiController(private val nordVpnServers: NordVpnServers, private val rout
             )
 
             if (servers.isEmpty()) {
-                status = Status.DISCONNECTED
+                connectionStatus = ConnectionStatus.DISCONNECTED
                 emit(message("No VPN servers found"))
                 return@flow
             }
 
-            val server = servers.first()
-            emit(message("Connecting to server ${server.hostname}"))
+            val newServer = servers.first()
+            server = newServer.hostname
 
             emit(message("Setting up VPN client interface"))
             ensureWireguardInterface()
@@ -69,7 +83,7 @@ class ApiController(private val nordVpnServers: NordVpnServers, private val rout
             ensureFirewallNat()
 
             emit(message("Setting up VPN connection"))
-            ensureWireguardPeer(server)
+            ensureWireguardPeer(newServer)
 
             emit(message("Setting up routing table for VPN"))
             ensureRoutingTable()
@@ -81,21 +95,23 @@ class ApiController(private val nordVpnServers: NordVpnServers, private val rout
             clearRoutingRules()
             hosts.forEach { ensureRoutingRule(it) }
 
-            status = Status.CONNECTED
-            emit(message("Connected!"))
+            connectionStatus = ConnectionStatus.CONNECTED
+            emit(message("Connected to $server!"))
         })
 
     suspend fun disconnect(@Suppress("UNUSED_PARAMETER") req: ServerRequest) =
         ServerResponse.ok().contentType(MediaType.APPLICATION_NDJSON).bodyAndAwait(flow {
-            status = Status.DISCONNECTING
+            connectionStatus = ConnectionStatus.DISCONNECTING
 
             emit(message("Closing VPN connection"))
             clearWireguardPeer()
+            server = null
 
             emit(message("Clearing routing rule"))
             clearRoutingRules()
+            hosts = listOf()
 
-            status = Status.DISCONNECTED
+            connectionStatus = ConnectionStatus.DISCONNECTED
             emit(message("Disconnected!"))
         })
 
@@ -149,20 +165,21 @@ class ApiController(private val nordVpnServers: NordVpnServers, private val rout
     private fun ensureWireguardPeer(server: Server) {
         val address = server.station
         val key = server.technologies.first { it.name == "Wireguard" }.metadata!!["public_key"]
+        val comment = "${server.hostname} - $vpnManComment"
 
         val peers = routerOsClient.list(InterfaceWireguardPeers(iface = nordLynxInterface))
         if (peers.isEmpty()) {
             routerOsClient.add(
                 InterfaceWireguardPeers(
                     allowedAddress = "0.0.0.0/0", iface = nordLynxInterface,
-                    endpointAddress = address, endpointPort = nordLynxPort, publicKey = key, comment = vpnManComment
+                    endpointAddress = address, endpointPort = nordLynxPort, publicKey = key, comment = comment
                 )
             )
         } else if (peers.first().endpointAddress != address || peers.first().publicKey != key) {
             routerOsClient.set(
                 peers.first().id!!, InterfaceWireguardPeers(
                     allowedAddress = "0.0.0.0/0", iface = nordLynxInterface,
-                    endpointAddress = address, endpointPort = nordLynxPort, publicKey = key, comment = vpnManComment
+                    endpointAddress = address, endpointPort = nordLynxPort, publicKey = key, comment = comment
                 )
             )
         }
@@ -190,7 +207,15 @@ class ApiController(private val nordVpnServers: NordVpnServers, private val rout
 
     private fun clearWireguardPeer() {
         val peers = routerOsClient.list(InterfaceWireguardPeers(iface = nordLynxInterface))
-        peers.filter { it.comment == vpnManComment }.forEach { routerOsClient.remove<InterfaceWireguardPeers>(it.id!!) }
+        peers.filter { it.comment?.endsWith(vpnManComment) ?: false }
+            .forEach { routerOsClient.remove<InterfaceWireguardPeers>(it.id!!) }
+    }
+
+    private fun getWireguardPeerName(): String? {
+        val peers = routerOsClient.list(InterfaceWireguardPeers(iface = nordLynxInterface))
+        return peers.filter { it.comment?.endsWith(vpnManComment) ?: false }
+            .map { it.comment!!.split(" - ").first() }
+            .firstOrNull()
     }
 
     // /routing/rule/add action=lookup routing-mark=to-vpn table=to-vpn
@@ -208,5 +233,9 @@ class ApiController(private val nordVpnServers: NordVpnServers, private val rout
     private fun clearRoutingRules() {
         val rules = routerOsClient.list<RoutingRule>()
         rules.filter { it.comment == vpnManComment }.forEach { routerOsClient.remove<RoutingRule>(it.id!!) }
+    }
+
+    private fun getRoutedHosts(): List<String> {
+        return routerOsClient.list(RoutingRule(table = routingTableName)).map { it.srcAddress!! }
     }
 }
