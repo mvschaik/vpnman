@@ -6,8 +6,6 @@ import org.springframework.http.codec.multipart.FormFieldPart
 import org.springframework.web.reactive.function.server.*
 
 private const val routingTableName = "to-vpn"
-private const val addressListName = "vpn-users"
-private const val commentMarker = "vpnman"
 private const val vpnGatewayAddress = "10.5.0.1"
 private const val vpnLocalAddress = "10.5.0.2/29"
 private const val country = "NL"
@@ -70,7 +68,8 @@ class ApiController(private val nordVpnServers: NordVpnServers, private val rout
             emit(message("Setting up VPN client interface"))
             ensureWireguardInterface()
 
-            // TODO IP Address
+            emit(message("Configuring IP address for VPN interface"))
+            ensureWireguardIpAddress()
 
             emit(message("Setting up VPN connection"))
             ensureWireguardPeer(server)
@@ -86,7 +85,7 @@ class ApiController(private val nordVpnServers: NordVpnServers, private val rout
             emit(message("Connected!"))
         })
 
-    suspend fun disconnect(_req: ServerRequest) =
+    suspend fun disconnect(@Suppress("UNUSED_PARAMETER") req: ServerRequest) =
         ServerResponse.ok().contentType(MediaType.APPLICATION_NDJSON).bodyAndAwait(flow {
             status = Status.DISCONNECTING
 
@@ -136,6 +135,13 @@ class ApiController(private val nordVpnServers: NordVpnServers, private val rout
                     comment = vpnManComment
                 )
             )
+        }
+    }
+
+    private fun ensureWireguardIpAddress() {
+        val addresses = routerOsClient.list(IpAddress(iface = nordLynxInterface))
+        if (addresses.isEmpty()) {
+            routerOsClient.add(IpAddress(iface = nordLynxInterface, address = vpnLocalAddress, comment = vpnManComment))
         }
     }
 

@@ -88,6 +88,23 @@ data class RoutingRule(
     @JsonProperty("inactive") val inactive: Boolean? = null,
 )
 
+@ResourcePath("/ip/address")
+@JsonInclude(JsonInclude.Include.NON_NULL)
+data class IpAddress(
+    @JsonProperty(".id") val id: String? = null,
+
+    @JsonProperty("comment") val comment: String? = null,
+    @JsonProperty("disabled") val disabled: Boolean? = null,
+
+    @JsonProperty("address") val address: String? = null,
+    @JsonProperty("broadcast") val broadcast: String? = null,
+    @JsonProperty("interface") val iface: String? = null,
+    @JsonProperty("network") val network: String? = null,
+
+    // Read-only properties
+    @JsonProperty("actual-interface") val actualInterface: String? = null
+)
+
 @ResourcePath("/ip/firewall/nat")
 @JsonInclude(JsonInclude.Include.NON_NULL)
 data class IpFirewallNat(
