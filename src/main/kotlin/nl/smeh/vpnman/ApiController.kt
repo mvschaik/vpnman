@@ -59,23 +59,23 @@ class ApiController(private val nordVpnServers: NordVpnServers, private val rout
             val server = servers.first()
             emit(message("Connecting to server ${server.hostname}"))
 
-            emit(message("Setting up routing table for VPN"))
-            ensureRoutingTable()
-
-            emit(message("Setting up route to VPN"))
-            ensureRouteToVpn()
-
             emit(message("Setting up VPN client interface"))
             ensureWireguardInterface()
 
             emit(message("Configuring IP address for VPN interface"))
             ensureWireguardIpAddress()
 
+            emit(message("Configuring NAT for VPN interface"))
+            ensureFirewallNat()
+
             emit(message("Setting up VPN connection"))
             ensureWireguardPeer(server)
 
-            emit(message("Configuring NAT for VPN interface"))
-            ensureFirewallNat()
+            emit(message("Setting up routing table for VPN"))
+            ensureRoutingTable()
+
+            emit(message("Setting up route to VPN"))
+            ensureRouteToVpn()
 
             emit(message("Setting up routing rules"))
             clearRoutingRules()
