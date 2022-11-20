@@ -62,6 +62,7 @@ docker run --rm --expose=8080 \
 ### TODO
 
 * Add tests. :-)
+* Route DNS to NordVPN.
 * Take private key from environment variable.
 * Store country in browser state.
 * Preselect/mark obvious candidate devices, e.g. Chromecast, AppleTV, etc. based on MAC address.

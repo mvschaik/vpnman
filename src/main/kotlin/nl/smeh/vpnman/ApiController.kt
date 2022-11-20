@@ -39,7 +39,7 @@ class ApiController(private val nordVpnServers: NordVpnServers, private val rout
 
     private fun message(message: String) = ResponseMessage(Status(connectionStatus, server, country, hosts), message)
 
-    suspend fun getState(req: ServerRequest): ServerResponse {
+    suspend fun getState(@Suppress("UNUSED_PARAMETER") req: ServerRequest): ServerResponse {
         server = getWireguardPeerName()
         hosts = getRoutedHosts()
         connectionStatus =

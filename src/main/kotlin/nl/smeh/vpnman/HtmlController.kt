@@ -11,7 +11,7 @@ class HtmlController(
 ) {
 
     suspend fun home(req: ServerRequest): ServerResponse {
-        val clientAddr = req.remoteAddress().get().address.hostAddress
+        val clientAddr = req.remoteAddress().get().hostName
 
         val leases =
             routerOsClient.list<IpDhcpServerLease>().map {
@@ -29,17 +29,12 @@ class HtmlController(
             )
         }
 
-        preferredCountryCodes.reversed().forEach {
-            val len = countries.size
-            countries = promoteCountry(countries, it)
-            if (countries.size != len) throw RuntimeException("Ughh")
-        }
+        preferredCountryCodes.reversed().forEach { countries = promoteCountry(countries, it) }
 
         return ServerResponse.ok().renderAndAwait("main", mapOf("hosts" to leases, "countries" to countries))
     }
 
     private fun promoteCountry(list: List<Map<String, String>>, countryCode: String): List<Map<String, String>> {
-        println("Promoting $countryCode")
         val promotedCountryIndex = list.indexOfFirst { it["code"]?.uppercase() == countryCode.uppercase() }
         if (promotedCountryIndex < 0) return list
         return listOf(list[promotedCountryIndex]) +
