@@ -25,7 +25,7 @@ enum class ConnectionStatus(val value: String) {
 
 data class ResponseMessage(val status: Status, val message: String)
 
-data class Status(val connection: ConnectionStatus, val server: String?, val hosts: List<String>)
+data class Status(val connection: ConnectionStatus, val server: String?, val country: String?, val hosts: List<String>)
 
 fun MultiValueMap<String, Part>.getFormValues(key: String) =
     getOrDefault(key, listOf()).filterIsInstance<FormFieldPart>().map { it.value() }
@@ -35,14 +35,18 @@ class ApiController(private val nordVpnServers: NordVpnServers, private val rout
     private var connectionStatus = ConnectionStatus.UNKNOWN
     private var hosts = listOf<String>()
     private var server: String? = null
+    private var country: String? = null
 
-    private fun message(message: String) = ResponseMessage(Status(connectionStatus, server, hosts), message)
+    private fun message(message: String) = ResponseMessage(Status(connectionStatus, server, country, hosts), message)
 
     suspend fun getState(req: ServerRequest): ServerResponse {
         server = getWireguardPeerName()
         hosts = getRoutedHosts()
         connectionStatus =
-            if (server != null && !hosts.isEmpty()) ConnectionStatus.CONNECTED else ConnectionStatus.DISCONNECTED
+            if (server != null && hosts.isNotEmpty()) ConnectionStatus.CONNECTED else ConnectionStatus.DISCONNECTED
+        // NordVPN server names start with country code.
+        country = server?.substring(0..1)?.uppercase()
+        if (country == "UK") country = "GB"  // Ughh...
         return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).bodyValueAndAwait(
             message(if (connectionStatus == ConnectionStatus.CONNECTED) "Connected to $server" else "Disconnected")
         )
@@ -60,17 +64,17 @@ class ApiController(private val nordVpnServers: NordVpnServers, private val rout
                 return@flow
             }
 
-            val countryCode = data.getFormValues("country").first()
-            if (countryCode.isEmpty()) {
+            country = data.getFormValues("country").firstOrNull()
+            if (country == null) {
                 connectionStatus = ConnectionStatus.DISCONNECTED
                 emit(message("Error! No country selected for VPN"))
                 return@flow
             }
 
-            emit(message("Checking optimal server for country $countryCode"))
+            emit(message("Checking optimal server for country $country"))
             val servers = nordVpnServers.getServers(
                 Filter(
-                    country_id = nordVpnServers.countriesByCode[countryCode]?.id,
+                    country_id = nordVpnServers.countriesByCode[country]?.id,
                     servers_technologies = listOf(nordVpnServers.technologiesByName[technologyName]!!.id)
                 )
             )

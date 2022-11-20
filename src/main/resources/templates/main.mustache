@@ -109,6 +109,9 @@
                 if (status.status.hosts) {
                     setSelectedHosts(status.status.hosts);
                 }
+                if (status.status.country) {
+                    advancedForm.elements['country'].value = status.status.country;
+                }
                 break;
             case 'DISCONNECTED':
                 connectBtn.disabled = false;
