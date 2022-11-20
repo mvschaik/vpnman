@@ -33,8 +33,11 @@ fun main(args: Array<String>) {
                         .split(",")
                         .filterNot { it.isEmpty() }
 
+                val privateKey = properties.getProperty("privateWireguardKey")
+
                 val htmlController = HtmlController(ref(), ref(), promotedCountryCodes)
-                val apiController = ApiController(ref(), ref())
+                val apiController = ApiController(ref(), ref(), privateKey)
+
                 coRouter {
                     accept(MediaType.TEXT_HTML).nest {
                         GET("/", htmlController::home)

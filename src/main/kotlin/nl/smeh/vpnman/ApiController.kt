@@ -30,7 +30,11 @@ data class Status(val connection: ConnectionStatus, val server: String?, val cou
 fun MultiValueMap<String, Part>.getFormValues(key: String) =
     getOrDefault(key, listOf()).filterIsInstance<FormFieldPart>().map { it.value() }
 
-class ApiController(private val nordVpnServers: NordVpnServers, private val routerOsClient: RouterOsClient) {
+class ApiController(
+    private val nordVpnServers: NordVpnServers,
+    private val routerOsClient: RouterOsClient,
+    private val privateKey: String?
+) {
 
     private var connectionStatus = ConnectionStatus.UNKNOWN
     private var hosts = listOf<String>()
@@ -162,7 +166,7 @@ class ApiController(private val nordVpnServers: NordVpnServers, private val rout
                 InterfaceWireguard(
                     name = nordLynxInterface,
                     listenPort = nordLynxPort,
-                    privateKey = "TODO PRIVATE KEY",
+                    privateKey = privateKey,
                     comment = vpnManComment
                 )
             )

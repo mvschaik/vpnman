@@ -38,6 +38,11 @@ Configuration can be pre-configured and will be kept intact as much as possible.
 
 You might need to configure https API access and a user on your Mikrotik device.
 
+You can provide your private key for NordVPN/Nordlynx as a variable, or preconfigure a wireguard interface called
+"nordlynx1" on your router. (There's
+various [articles](https://forum.gl-inet.com/t/configure-wireguard-client-to-connect-to-nordvpn-servers/10422/25) that
+describe how to obtain the key.)
+
 To just run the application:
 
 ```sh
@@ -45,6 +50,7 @@ routeros.baseUrl=https://<your router address here>/
 routeros.username=<your username here>
 routeros.password=<your password here>
 preferredCountries=nl,gb,us  # Optional
+privateWireguardKey=<private key>  # Optional
 ./gradlew bootRun
 ```
 
@@ -63,7 +69,6 @@ docker run --rm --expose=8080 \
 
 * Add tests. :-)
 * Route DNS to NordVPN.
-* Take private key from environment variable.
 * Store country in browser state.
 * Preselect/mark obvious candidate devices, e.g. Chromecast, AppleTV, etc. based on MAC address.
 
