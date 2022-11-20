@@ -44,6 +44,7 @@ To just run the application:
 routeros.baseUrl=https://<your router address here>/
 routeros.username=<your username here>
 routeros.password=<your password here>
+preferredCountries=nl,gb,us  # Optional
 ./gradlew bootRun
 ```
 
@@ -62,7 +63,6 @@ docker run --rm --expose=8080 \
 
 * Add tests. :-)
 * Take private key from environment variable.
-* Make country configurable.
 * Store country in browser state.
 * Preselect/mark obvious candidate devices, e.g. Chromecast, AppleTV, etc. based on MAC address.
 

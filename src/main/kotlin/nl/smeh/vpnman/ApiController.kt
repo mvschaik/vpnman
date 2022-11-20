@@ -3,12 +3,13 @@ package nl.smeh.vpnman
 import kotlinx.coroutines.flow.flow
 import org.springframework.http.MediaType
 import org.springframework.http.codec.multipart.FormFieldPart
+import org.springframework.http.codec.multipart.Part
+import org.springframework.util.MultiValueMap
 import org.springframework.web.reactive.function.server.*
 
 private const val routingTableName = "to-vpn"
 private const val vpnGatewayAddress = "10.5.0.1"
 private const val vpnLocalAddress = "10.5.0.2/29"
-private const val country = "NL"
 private const val technologyName = "Wireguard"
 private const val vpnManComment = "Managed by VPNMAN"
 private const val nordLynxInterface = "nordlynx1"
@@ -25,6 +26,9 @@ enum class ConnectionStatus(val value: String) {
 data class ResponseMessage(val status: Status, val message: String)
 
 data class Status(val connection: ConnectionStatus, val server: String?, val hosts: List<String>)
+
+fun MultiValueMap<String, Part>.getFormValues(key: String) =
+    getOrDefault(key, listOf()).filterIsInstance<FormFieldPart>().map { it.value() }
 
 class ApiController(private val nordVpnServers: NordVpnServers, private val routerOsClient: RouterOsClient) {
 
@@ -49,17 +53,24 @@ class ApiController(private val nordVpnServers: NordVpnServers, private val rout
             connectionStatus = ConnectionStatus.CONNECTING
 
             val data = req.awaitMultipartData()
-            hosts = data.getOrDefault("host", listOf()).filterIsInstance<FormFieldPart>().map { it.value() }
+            hosts = data.getFormValues("host")
             if (hosts.isEmpty()) {
                 connectionStatus = ConnectionStatus.DISCONNECTED
                 emit(message("Error! No hosts selected for VPN"))
                 return@flow
             }
 
-            emit(message("Checking optimal server for country $country"))
+            val countryCode = data.getFormValues("country").first()
+            if (countryCode.isEmpty()) {
+                connectionStatus = ConnectionStatus.DISCONNECTED
+                emit(message("Error! No country selected for VPN"))
+                return@flow
+            }
+
+            emit(message("Checking optimal server for country $countryCode"))
             val servers = nordVpnServers.getServers(
                 Filter(
-                    country_id = nordVpnServers.countriesByCode[country]?.id,
+                    country_id = nordVpnServers.countriesByCode[countryCode]?.id,
                     servers_technologies = listOf(nordVpnServers.technologiesByName[technologyName]!!.id)
                 )
             )
@@ -164,7 +175,7 @@ class ApiController(private val nordVpnServers: NordVpnServers, private val rout
     // /interface/wireguard/peers/add allowed-address=0.0.0.0/0 endpoint-address=XXX endpoint-port=51820 interface=nordlynx public-key=xxx
     private fun ensureWireguardPeer(server: Server) {
         val address = server.station
-        val key = server.technologies.first { it.name == "Wireguard" }.metadata!!["public_key"]
+        val key = server.technologies.first { it.name == technologyName }.metadata!!["public_key"]
         val comment = "${server.hostname} - $vpnManComment"
 
         val peers = routerOsClient.list(InterfaceWireguardPeers(iface = nordLynxInterface))

@@ -24,27 +24,39 @@
         <a id="advanced-toggle" href="#advanced">Advanced settings</a>
         <div class="collapse" id="advanced">
             <form id="advanced-form">
-                <div class="card card-body">
-                    <h1>Select VPN users</h1>
-                    <table>
-                        <thead>
-                        <tr>
-                            <th>VPN</th>
-                            <th>Name</th>
-                            <th>Address</th>
-                        </tr>
-                        </thead>
-                        <tbody>
-                        {{#hosts}}
-                        <tr>
-                            <td><input name="host" value="{{ address }}" type="checkbox" {{#checked}}checked{{/checked}}
-                                       disabled></td>
-                            <td>{{#name}}{{ name }}{{/name}}</td>
-                            <td>{{ address }}</td>
-                        </tr>
-                        {{/hosts}}
-                        </tbody>
-                    </table>
+                <div class="card">
+
+                    <div class="p-3">
+                        <h3>Select country</h3>
+                        <select name="country">
+                            {{#countries}}
+                            <option value="{{ code }}">{{ name }}</option>
+                            {{/countries}}
+                        </select>
+                    </div>
+
+                    <div class="p-3">
+                        <h3>Select VPN users</h3>
+                        <table>
+                            <thead>
+                            <tr>
+                                <th>VPN</th>
+                                <th>Name</th>
+                                <th>Address</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            {{#hosts}}
+                            <tr>
+                                <td><input name="host" value="{{ address }}" type="checkbox" {{#checked}}checked{{/checked}}
+                                           disabled></td>
+                                <td>{{#name}}{{ name }}{{/name}}</td>
+                                <td>{{ address }}</td>
+                            </tr>
+                            {{/hosts}}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </form>
         </div>

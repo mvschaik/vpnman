@@ -30,11 +30,16 @@ fun main(args: Array<String>) {
             }
             bean<ForwardedHeaderTransformer>()
             bean {
-                val htmlController = HtmlController(ref(), ref())
+                val properties = ref<Environment>()
+                val promotedCountryCodes = properties.getProperty("preferredCountries", "")
+                        .split(",")
+                        .filterNot { it.isEmpty() }
+
+                val htmlController = HtmlController(ref(), ref(), promotedCountryCodes)
                 val apiController = ApiController(ref(), ref())
                 coRouter {
                     accept(MediaType.TEXT_HTML).nest {
-                        GET("/", htmlController::blog)
+                        GET("/", htmlController::home)
                     }
                     accept(MediaType.APPLICATION_JSON).nest {
                         "/api".nest {
