@@ -49,8 +49,8 @@ data class InterfaceWireguardPeers(
     @JsonProperty("current-endpoint-address") val currentEndpointAddress: String? = null,
     @JsonProperty("current-endpoint-port") val currentEndpointPort: Int? = null,
     @JsonProperty("last-handshake") val lastHandshake: String? = null,
-    @JsonProperty("rx") val rx: Int? = null,
-    @JsonProperty("tx") val tx: Int? = null,
+    @JsonProperty("rx") val rx: Long? = null,
+    @JsonProperty("tx") val tx: Long? = null,
 )
 
 @ResourcePath("/routing/table")
